@@ -90,17 +90,12 @@ function App() {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-
+  
       mediaRecorderRef.current.onstop = () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
         
         console.log('Audio Blob:', audioBlob);
         
-        // If you still want to send via WebSocket
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(audioBlob);
-        }
-
         // Send to server for transcription
         const formData = new FormData();
         formData.append('audio', audioBlob, 'audio.webm');
@@ -125,7 +120,7 @@ function App() {
         chunksRef.current = [];
       };
     }
-  };
+  };  
 
   return (
     <div className="App">

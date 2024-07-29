@@ -35,21 +35,10 @@ wss.on('connection', (ws) => {
             }));
           }
         });
-      } else {
-        // If it's not a transcription, assume it's audio data and send as before
-        clients.forEach((client) => {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(message);
-          }
-        });
       }
     } catch (error) {
-      // If parsing fails, assume it's audio data and send as before
-      clients.forEach((client) => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(message);
-        }
-      });
+      // If parsing fails, we'll ignore the message
+      console.error('Error parsing message:', error);
     }
   });
 
@@ -58,7 +47,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-// TRANSCRIBES AUDIO AND DIRECTLY TRANSLATES TO ENGLISH
+// TRANSCRIBES AUDIO AND DIRECTLY TRANSLATES TO ENGLISH and GENERATES NEW AUDIO FROM TRANSCRIPT 
 app.post('/transcribe_by_language', upload.single('audio'), async (req, res) => {
   try {
     const form = new FormData();
@@ -89,9 +78,9 @@ app.post('/transcribe_by_language', upload.single('audio'), async (req, res) => 
     // Generate audio from the transcription
     const wavData = await generateAudio(data.text);
 
-    // Broadcast the audio to all clients
+    // Broadcast the audio to all clients except the sender
     clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
+      if (client.readyState === WebSocket.OPEN && client !== req.ws) {
         client.send(wavData);
       }
     });
