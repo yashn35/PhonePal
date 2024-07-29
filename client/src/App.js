@@ -4,6 +4,7 @@ function App() {
   const [ws, setWs] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [receivedAudio, setReceivedAudio] = useState(null);
+  const [transcription, setTranscription] = useState('');
   const audioRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -54,14 +55,6 @@ function App() {
         }
       };
 
-      mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(audioBlob);
-        }
-        chunksRef.current = [];
-      };
-
       mediaRecorderRef.current.start();
       setIsRecording(true);
     } catch (error) {
@@ -73,6 +66,34 @@ function App() {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+
+      mediaRecorderRef.current.onstop = () => {
+        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
+        
+        console.log('Audio Blob:', audioBlob);
+        
+        // If you still want to send via WebSocket
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(audioBlob);
+        }
+
+        // Send to server for transcription
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'audio.webm');
+        
+        fetch('http://localhost:8080/transcribe_by_language', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Transcription:', data.transcription);
+          setTranscription(data.transcription);
+        })
+        .catch(error => console.error('Error:', error));
+        
+        chunksRef.current = [];
+      };
     }
   };
 
@@ -90,6 +111,10 @@ function App() {
       <div>
         <h2>Received Audio</h2>
         <audio ref={audioRef} controls />
+      </div>
+      <div>
+        <h2>Transcription</h2>
+        <p>{transcription}</p>
       </div>
     </div>
   );
