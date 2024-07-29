@@ -5,6 +5,7 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [receivedAudio, setReceivedAudio] = useState(null);
   const [transcription, setTranscription] = useState('');
+  const [receivedTranscription, setReceivedTranscription] = useState('');
   const audioRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -18,10 +19,33 @@ function App() {
     };
 
     socket.onmessage = (event) => {
-      console.log('Received audio data');
-      const audioBlob = event.data;
-      const audioUrl = URL.createObjectURL(audioBlob);
-      setReceivedAudio(audioUrl);
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'transcription') {
+          console.log('Received transcription:', data.text);
+          setReceivedTranscription(data.text);
+        } else {
+          // Handle as audio data
+          console.log('Received audio data');
+          const audioBlob = new Blob([event.data], { type: 'audio/wav' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          setReceivedAudio(audioUrl);
+          
+          // Automatically play the received audio
+          const audio = new Audio(audioUrl);
+          audio.play().catch(error => console.error('Audio playback error:', error));
+        }
+      } catch (error) {
+        // If parsing fails, handle as audio data
+        console.log('Received audio data');
+        const audioBlob = event.data;
+        const audioUrl = URL.createObjectURL(audioBlob);
+        setReceivedAudio(audioUrl);
+        
+        // Automatically play the received audio
+        const audio = new Audio(audioUrl);
+        audio.play().catch(error => console.error('Audio playback error:', error));
+      }
     };
 
     socket.onerror = (error) => {
@@ -89,6 +113,12 @@ function App() {
         .then(data => {
           console.log('Transcription:', data.transcription);
           setTranscription(data.transcription);
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'transcription',
+              text: data.transcription
+            }));
+          }
         })
         .catch(error => console.error('Error:', error));
         
@@ -113,8 +143,12 @@ function App() {
         <audio ref={audioRef} controls />
       </div>
       <div>
-        <h2>Transcription</h2>
+        <h2>Your Transcription</h2>
         <p>{transcription}</p>
+      </div>
+      <div>
+        <h2>Received Transcription</h2>
+        <p>{receivedTranscription}</p>
       </div>
     </div>
   );
