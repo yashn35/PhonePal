@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 function App() {
   const [ws, setWs] = useState(null);
@@ -9,57 +9,60 @@ function App() {
   const audioRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const [isSender, setIsSender] = useState(false);
 
-  useEffect(() => {
-    const socket = new WebSocket('ws://localhost:8080');
-    setWs(socket);
+  const [isProcessingOwnMessage, setIsProcessingOwnMessage] = useState(false);
 
-    socket.onopen = () => {
-      console.log('WebSocket connection established');
-    };
-
-    socket.onmessage = (event) => {
+  const handleMessage = useCallback((event) => {
+    console.log("Message received, isSender:", isSender, "isProcessingOwnMessage:", isProcessingOwnMessage);
+    if (!isSender && !isProcessingOwnMessage) {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'transcription') {
           console.log('Received transcription:', data.text);
           setReceivedTranscription(data.text);
         } else {
-          // Handle as audio data
           console.log('Received audio data');
           const audioBlob = new Blob([event.data], { type: 'audio/wav' });
           const audioUrl = URL.createObjectURL(audioBlob);
           setReceivedAudio(audioUrl);
           
-          // Automatically play the received audio
           const audio = new Audio(audioUrl);
           audio.play().catch(error => console.error('Audio playback error:', error));
         }
       } catch (error) {
-        // If parsing fails, handle as audio data
         console.log('Received audio data');
         const audioBlob = event.data;
         const audioUrl = URL.createObjectURL(audioBlob);
         setReceivedAudio(audioUrl);
-        
-        // Automatically play the received audio
-        const audio = new Audio(audioUrl);
-        audio.play().catch(error => console.error('Audio playback error:', error));
       }
-    };
+    } else {
+      console.log("Ignoring own message");
+    }
+  }, [isSender, isProcessingOwnMessage]);
 
+  useEffect(() => {
+    const socket = new WebSocket('ws://localhost:8080');
+    setWs(socket);
+  
+    socket.onopen = () => {
+      console.log('WebSocket connection established');
+    };
+  
+    socket.onmessage = handleMessage;
+  
     socket.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
-
+  
     socket.onclose = () => {
       console.log('WebSocket connection closed');
     };
-
+  
     return () => {
       socket.close();
     };
-  }, []);
+  }, [handleMessage]);
 
   useEffect(() => {
     if (receivedAudio && audioRef.current) {
@@ -69,8 +72,34 @@ function App() {
   }, [receivedAudio]);
 
   const startRecording = async () => {
+    setIsRecording(true);
+    setIsSender(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let stream;
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        console.log('Using standard getUserMedia');
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } else if (navigator.getUserMedia) {
+        console.log('Using deprecated getUserMedia');
+        stream = await new Promise((resolve, reject) => {
+          navigator.getUserMedia({ audio: true }, resolve, reject);
+        });
+      } else if (navigator.webkitGetUserMedia) {
+        console.log('Using webkitGetUserMedia');
+        stream = await new Promise((resolve, reject) => {
+          navigator.webkitGetUserMedia({ audio: true }, resolve, reject);
+        });
+      } else if (navigator.mozGetUserMedia) {
+        console.log('Using mozGetUserMedia');
+        stream = await new Promise((resolve, reject) => {
+          navigator.mozGetUserMedia({ audio: true }, resolve, reject);
+        });
+      } else {
+        throw new Error('No getUserMedia method found');
+      }
+  
+      console.log('Microphone access granted');
+      
       mediaRecorderRef.current = new MediaRecorder(stream);
       
       mediaRecorderRef.current.ondataavailable = (event) => {
@@ -78,25 +107,27 @@ function App() {
           chunksRef.current.push(event.data);
         }
       };
-
+  
       mediaRecorderRef.current.start();
       setIsRecording(true);
     } catch (error) {
       console.error('Error starting recording:', error);
+      alert(`An error occurred while trying to start recording: ${error.message}`);
     }
   };
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      console.log("CLICKED STOP");
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-  
+      setIsProcessingOwnMessage(true);
+
       mediaRecorderRef.current.onstop = () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
         
         console.log('Audio Blob:', audioBlob);
         
-        // Send to server for transcription
         const formData = new FormData();
         formData.append('audio', audioBlob, 'audio.webm');
         
@@ -114,13 +145,19 @@ function App() {
               text: data.transcription
             }));
           }
+          setIsProcessingOwnMessage(false);
+          setIsSender(false);
         })
-        .catch(error => console.error('Error:', error));
+        .catch(error => {
+          console.error('Error:', error);
+          setIsProcessingOwnMessage(false);
+          setIsSender(false);
+        });
         
         chunksRef.current = [];
       };
     }
-  };  
+  };
 
   return (
     <div className="App">

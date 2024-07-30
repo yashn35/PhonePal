@@ -9,6 +9,9 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 
+const https = require('https');
+const fs = require('fs');
+
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
@@ -172,6 +175,6 @@ async function generateAudio(text) {
 // });
 
 const port = 8080;
-server.listen(port, () => {
+server.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on port ${port}`);
 });
