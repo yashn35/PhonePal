@@ -10,6 +10,7 @@ function App() {
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const [isSender, setIsSender] = useState(false);
+  const [userVoiceId, setUserVoiceId] = useState(null);
 
   const [isProcessingOwnMessage, setIsProcessingOwnMessage] = useState(false);
 
@@ -41,12 +42,45 @@ function App() {
     }
   }, [isSender, isProcessingOwnMessage]);
 
+  const handleVoiceSampleUpload = async (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const formData = new FormData();
+      formData.append('voiceSample', file);
+  
+      try {
+        const response = await fetch('http://localhost:8080/clone-voice', {
+          method: 'POST',
+          body: formData,
+        });
+  
+        if (response.ok) {
+          const data = await response.json();
+          setUserVoiceId(data.voiceId);
+          console.log('Voice cloned successfully, ID:', data.voiceId);
+          
+          // Send the new voiceId to the server via WebSocket
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'voiceId', voiceId: data.voiceId }));
+          }
+        } else {
+          console.error('Failed to clone voice');
+        }
+      } catch (error) {
+        console.error('Error uploading voice sample:', error);
+      }
+    }
+  };
+
   useEffect(() => {
     const socket = new WebSocket('ws://localhost:8080');
     setWs(socket);
   
     socket.onopen = () => {
       console.log('WebSocket connection established');
+      if (userVoiceId) {
+        socket.send(JSON.stringify({ type: 'voiceId', voiceId: userVoiceId }));
+      }  
     };
   
     socket.onmessage = handleMessage;
@@ -62,7 +96,7 @@ function App() {
     return () => {
       socket.close();
     };
-  }, [handleMessage]);
+  }, [userVoiceId, handleMessage]);
 
   useEffect(() => {
     if (receivedAudio && audioRef.current) {
@@ -122,7 +156,7 @@ function App() {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       setIsProcessingOwnMessage(true);
-
+  
       mediaRecorderRef.current.onstop = () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
         
@@ -130,6 +164,7 @@ function App() {
         
         const formData = new FormData();
         formData.append('audio', audioBlob, 'audio.webm');
+        formData.append('voiceId', userVoiceId); 
         
         fetch('http://localhost:8080/transcribe_by_language', {
           method: 'POST',
@@ -163,6 +198,12 @@ function App() {
     <div className="App">
       <h1>PhonePal (test) </h1>
       <div>
+        <h2>Upload Voice Sample</h2>
+        <input type="file" accept="audio/*" onChange={handleVoiceSampleUpload} />
+        {userVoiceId && <p>Voice ID: {userVoiceId}</p>}
+      </div>
+      <div>
+        <h2>Communicate!</h2>
         <button onClick={startRecording} disabled={isRecording}>
           Start Recording
         </button>

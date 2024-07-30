@@ -1,2 +1,4 @@
 .env
 updates.js
+server.cert
+server.key
