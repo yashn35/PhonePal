@@ -7,7 +7,8 @@ const languages = [
   { code: "es", name: "Spanish" },
   { code: "fr", name: "French" },
   { code: "de", name: "German" },
-  { code: "hi", name: "Hindi" },
+  { code: "zh", name: "Chinese" }, 
+  { code: "ja", name: "Japanese" }, 
 ];
 
 function App() {
@@ -187,7 +188,9 @@ function App() {
         
         const formData = new FormData();
         formData.append('audio', audioBlob, 'audio.webm');
-        formData.append('voiceId', userVoiceId); 
+        formData.append('voiceId', userVoiceId);
+        formData.append('senderLanguage', selectedLanguage);
+        formData.append('receiverLanguage', partnerLanguage);
         
         fetch('http://localhost:8080/transcribe_by_language', {
           method: 'POST',
@@ -196,11 +199,12 @@ function App() {
         .then(response => response.json())
         .then(data => {
           console.log('Transcription:', data.transcription);
+          console.log('Translation:', data.translation);
           setTranscription(data.transcription);
           if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
               type: 'transcription',
-              text: data.transcription
+              text: data.translation  // Send the translated text
             }));
           }
           setIsProcessingOwnMessage(false);
@@ -216,6 +220,7 @@ function App() {
       };
     }
   };
+  
 
   return (
     <div className="App">
