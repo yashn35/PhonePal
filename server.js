@@ -37,16 +37,20 @@ wss.on('connection', (ws) => {
       if (data.type === 'voiceId') {
         ws.voiceId = data.voiceId;
         console.log('Updated voiceId for client:', ws.voiceId);
-      } else if (data.type === 'transcription') {
-        // Broadcast the transcription to all other clients
+      } else if (data.type === 'language') {
+        ws.language = data.language;
+        console.log('Updated language for client:', ws.language);
+        // Broadcast the language to all other clients
         clients.forEach((client) => {
           if (client !== ws && client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({
-              type: 'transcription',
-              text: data.text
+              type: 'language',
+              language: data.language
             }));
           }
         });
+      } else if (data.type === 'transcription') {
+        // Existing transcription broadcast code...
       }
     } catch (error) {
       console.error('Error parsing message:', error);

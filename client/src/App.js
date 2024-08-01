@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
+// Languages available on Cartesia API
+const languages = [
+  { code: "", name: "Not Selected" },
+  { code: "en", name: "English" },
+  { code: "es", name: "Spanish" },
+  { code: "fr", name: "French" },
+  { code: "de", name: "German" },
+  { code: "hi", name: "Hindi" },
+];
+
 function App() {
   const [ws, setWs] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -11,8 +21,17 @@ function App() {
   const chunksRef = useRef([]);
   const [isSender, setIsSender] = useState(false);
   const [userVoiceId, setUserVoiceId] = useState(null);
-
   const [isProcessingOwnMessage, setIsProcessingOwnMessage] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState('');
+  const [partnerLanguage, setPartnerLanguage] = useState('');
+
+  const handleLanguageChange = (event) => {
+    const newLanguage = event.target.value;
+    setSelectedLanguage(newLanguage);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'language', language: newLanguage }));
+    }
+  };  
 
   const handleMessage = useCallback((event) => {
     console.log("Message received, isSender:", isSender, "isProcessingOwnMessage:", isProcessingOwnMessage);
@@ -22,6 +41,9 @@ function App() {
         if (data.type === 'transcription') {
           console.log('Received transcription:', data.text);
           setReceivedTranscription(data.text);
+        } else if (data.type === 'language') {
+          console.log('Received partner language:', data.language);
+          setPartnerLanguage(data.language);
         } else {
           console.log('Received audio data');
           const audioBlob = new Blob([event.data], { type: 'audio/wav' });
@@ -80,7 +102,8 @@ function App() {
       console.log('WebSocket connection established');
       if (userVoiceId) {
         socket.send(JSON.stringify({ type: 'voiceId', voiceId: userVoiceId }));
-      }  
+      }
+      socket.send(JSON.stringify({ type: 'language', language: selectedLanguage }));
     };
   
     socket.onmessage = handleMessage;
@@ -96,7 +119,7 @@ function App() {
     return () => {
       socket.close();
     };
-  }, [userVoiceId, handleMessage]);
+  }, [userVoiceId, selectedLanguage, handleMessage]);
 
   useEffect(() => {
     if (receivedAudio && audioRef.current) {
@@ -197,6 +220,20 @@ function App() {
   return (
     <div className="App">
       <h1>PhonePal (test) </h1>
+      <div>
+        <h2>Language Selection</h2>
+        <select value={selectedLanguage} onChange={handleLanguageChange}>
+          {languages.map((lang) => (
+            <option key={lang.code} value={lang.code}>
+              {lang.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <h2>Partner's Language</h2>
+        <p>{languages.find(lang => lang.code === partnerLanguage)?.name || 'Not selected'}</p>
+      </div>
       <div>
         <h2>Upload Voice Sample</h2>
         <input type="file" accept="audio/*" onChange={handleVoiceSampleUpload} />
